@@ -9,5 +9,5 @@ for idx,name in enumerate(['menu','instructions','game']):
   for j,ch in enumerate(txt):draw.text((int(x)+j*6,int(y)),ch,font=font,fill=color)
  canv.paste(im.resize((256,320),Image.Resampling.NEAREST),(55+idx*325,90))
  d.text((55+idx*325,55),name.upper(),font=ImageFont.load_default(size=20),fill='#41454f')
-d.text((55,440),'HOST RENDER PREVIEW - LCD font approximated; test colors on your panel.',font=ImageFont.load_default(size=17),fill='#41454f')
+d.text((55,440),'ACTUAL PIXEL FONT - 2x menu labels and score; verify colors on the LCD.',font=ImageFont.load_default(size=17),fill='#41454f')
 canv.save(p/'MyCraft_Preview.png')

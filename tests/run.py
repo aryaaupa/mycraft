@@ -4,6 +4,7 @@ root=Path(__file__).resolve().parents[1]
 s=root.joinpath('Lab9Main.c').read_text()
 s='\n'.join(l for l in s.splitlines() if not l.startswith('#include'))
 s=s.replace('int main(void)','int firmware_main(void)')
+s=s.replace('for(;*text;text++,x+=6*scale){', 'assert(x>=0 && y>=0 && x+(int)strlen(text)*6*scale-scale<=128 && y+7*scale<=160); for(;*text;text++,x+=6*scale){')
 stub=r'''
 #include <stdint.h>
 #include <stdio.h>
@@ -76,7 +77,8 @@ int main(void){
    if(i%8==0)draw();
   }
  }
- lang=0;menu();capture("menu");
+ for(lang=0;lang<2;lang++){ menu();helpPage=0;instructions();helpPage=1;instructions();score=65535;endScreen(1);endScreen(0);worldInit();draw();}
+ lang=0;helpPage=0;menu();capture("menu");
  instructions();capture("instructions");
  worldInit();ST7735_FillScreen(0xC73F);draw();capture("game");
  puts("PASS: debounce, queue overflow, recycling, gems, win/loss, reset, randomized bounds and building counts");

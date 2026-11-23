@@ -53,3 +53,7 @@ Set MYCRAFT_TEST_MODE in Lab9Main.c to 0 (ADC), 1 (languages), 2 (tiles and anim
 The existing repository ZIP is the historical starter project. The root source files here are the current overrides: copy them into your existing project as directed above. Do not expect the historical ZIP to contain these updates.
 
 See REQUIREMENTS.md for the rubric audit and VIDEO_PLAN.md for the required recording outline. Neither host tests nor adding test entry points is evidence that hardware checkout was completed.
+
+
+## Readability update
+The game uses an embedded 5x7 font with exact pixel placement. Main menu choices, action labels and score are 2x size (10x14 glyphs with 12px advance). Small supporting text is dark on cream or white on a dark HUD. Instructions now have two pages; press MINE to advance and again to play. The HUD shows score, progress and only the selected material, removing crowded inventory boxes. No new header is required for this font; it is embedded in Lab9Main.c.

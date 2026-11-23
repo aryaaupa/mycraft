@@ -78,8 +78,46 @@ static uint32_t tick=0;
 static uint32_t seed=0x1c44d5u;
 static uint32_t random32(void){seed^=seed<<13;seed^=seed>>17;seed^=seed<<5;return seed;}
 static const char *word(const char *en,const char *es){return lang?es:en;}
-static void str(int x,int y,const char *s,uint16_t c){ST7735_SetTextColor(c);ST7735_SetCursor(x,y);ST7735_OutString((char*)s);}
-static void number(int x,int y,uint32_t n){ST7735_SetCursor(x,y);ST7735_OutUDec(n);}
+// Fixed 5x7 pixel font; explicit pixel positioning, independent of driver cursor spacing.
+static const uint8_t font5x7[][7]={
+ {14,17,17,31,17,17,17},{30,17,17,30,17,17,30},{14,17,16,16,16,17,14},
+ {30,17,17,17,17,17,30},{31,16,16,30,16,16,31},{31,16,16,30,16,16,16},
+ {14,17,16,23,17,17,15},{17,17,17,31,17,17,17},{14,4,4,4,4,4,14},
+ {7,2,2,2,18,18,12},{17,18,20,24,20,18,17},{16,16,16,16,16,16,31},
+ {17,27,21,21,17,17,17},{17,25,21,19,17,17,17},{14,17,17,17,17,17,14},
+ {30,17,17,30,16,16,16},{14,17,17,17,21,18,13},{30,17,17,30,20,18,17},
+ {15,16,16,14,1,1,30},{31,4,4,4,4,4,4},{17,17,17,17,17,17,14},
+ {17,17,17,17,17,10,4},{17,17,17,21,21,21,10},{17,17,10,4,10,17,17},
+ {17,17,10,4,4,4,4},{31,1,2,4,8,16,31},
+ {14,17,19,21,25,17,14},{4,12,4,4,4,4,14},{14,17,1,2,4,8,31},
+ {30,1,1,14,1,1,30},{2,6,10,18,31,2,2},{31,16,16,30,1,1,30},
+ {14,16,16,30,17,17,14},{31,1,2,4,8,8,8},{14,17,17,14,17,17,14},
+ {14,17,17,15,1,1,14}};
+static void label(int x,int y,const char *text,uint16_t color,int scale){
+ for(;*text;text++,x+=6*scale){
+  unsigned char c=(unsigned char)*text;
+  if(c>='a'&&c<='z')c-=32;
+  int index=c>='A'&&c<='Z'?c-'A':c>='0'&&c<='9'?26+c-'0':-1;
+  for(int row=0;row<7;row++){
+   uint8_t bits=index>=0?font5x7[index][row]:0;
+   if(c==':')bits=(row==2||row==5)?4:0;
+   if(c=='/')bits=(row==0?1:row==1?2:row<4?4:row==4?8:16);
+   if(c=='-')bits=row==3?14:0;
+   if(c=='+')bits=row==3?14:(row==2||row==4)?4:0;
+   if(c=='>')bits=row==1?8:row==2?4:row==3?2:row==4?4:row==5?8:0;
+   if(c=='!')bits=row<5||row==6?4:0;
+   if(c=='=')bits=row==2||row==4?14:0;
+   if(c=='.')bits=row==6?4:0;
+   for(int col=0;col<5;col++)if(bits&(16>>col)){
+    int px=x+col*scale,py=y+row*scale;
+    if(px>=0&&py>=0&&px+scale<=128&&py+scale<=160)
+     ST7735_FillRect(px,py,scale,scale,color);
+   }
+  }
+ }
+}
+static void str(int x,int y,const char *s,uint16_t c){label(x*6,y*8,s,c,1);}
+static void number(int x,int y,uint32_t n){char b[12];snprintf(b,sizeof b,"%lu",(unsigned long)n);label(x*6,y*8,b,0x294A,1);}
 // Minecraft-style survival: mine materials, collect diamonds, build a shelter.
 // The potentiometer moves horizontally; UP jumps, DOWN crouches/digs downward.
 static uint8_t diamonds=0, dayPhase=0, facing=1, jumpFrames=0;
@@ -298,60 +336,40 @@ static void draw(void){
  }
  if(hudDirty){
   char line[24];
-  ST7735_FillRect(0,120,128,40,0x294A);
-  for(x=0;x<3;x++)heart(3+x*8,122,x<hp?0xFBB7:0x6B4D);
-  snprintf(line,sizeof line,"%s %u",word("PTS","PTS"),score);str(7,15,line,0xFFFF);
-  snprintf(line,sizeof line,"%s %u/3 %s %u/5",word("GEM","GEM"),diamonds,word("HOME","CASA"),built);
-  str(0,16,line,0xFF3D);
-  for(x=0;x<4;x++){
-   int px=x*32;
-   ST7735_FillRect(px,139,30,12,x==selected?0xFBB7:0x6B4D);
-   ST7735_FillRect(px+1,140,28,10,0x294A);
-   ST7735_FillRect(px+2,142,5,5,color(materials[x]));
-   number((px+10)/6,18,stock[x]);
-  }
-  str(0,19,word("DOWN:item MINE BUILD","ABA:tipo MINA CREA"),0xFFFF);
+  ST7735_FillRect(0,120,128,40,0x1082);
+  snprintf(line,sizeof line,"PTS %u",score);
+  label(2,121,line,0xFFFF,2);
+  for(x=0;x<3;x++)heart(102+x*8,150,x<hp?0xFFFF:0x6B4D);
+  snprintf(line,sizeof line,"GEM %u/3 %s %u/5",diamonds,word("HOME","CASA"),built);
+  label(2,138,line,0xFFFF,1);
+  static const char *names[2][4]={{"DIRT","STONE","WOOD","LEAVES"},{"TIERRA","PIEDRA","MADERA","HOJAS"}};
+  ST7735_FillRect(2,150,7,7,color(materials[selected]));
+  snprintf(line,sizeof line,"%s %u",names[lang][selected],stock[selected]);
+  label(14,150,line,0xFFFF,1);
   hudDirty=0;
  }
 
 }
-static void title(void){
- // Original 5x7 lettering, scaled 2x: crisp and readable on a 128px LCD.
- static const uint8_t glyph[7][7]={
- {17,27,21,17,17,17,17}, {17,17,10,4,4,4,4},
- {14,17,16,16,16,17,14}, {30,17,17,30,20,18,17},
- {14,17,17,31,17,17,17}, {31,16,16,30,16,16,16},
- {31,4,4,4,4,4,4}};
- for(int g=0;g<7;g++)for(int y=0;y<7;y++)for(int x=0;x<5;x++)if(glyph[g][y]&(16>>x)){
-  ST7735_FillRect(24+g*12+x*2,20+y*2,2,2,0xD295);
-  ST7735_FillRect(23+g*12+x*2,18+y*2,2,2,0xFF9C);
- }
-}
 static void menu(void){
- ST7735_FillScreen(0xC73F);
- ST7735_FillRect(0,116,128,44,0x8DF1);
- ST7735_FillRect(0,128,128,32,0xC3CA);
- ST7735_FillRect(8,11,19,3,0xFFFF);ST7735_FillRect(13,8,10,3,0xFFFF);
- ST7735_FillRect(98,44,23,3,0xFFFF);
- title();str(4,5,word("COZY GARDEN","JARDIN FELIZ"),0x294A);
- ST7735_FillRect(13,58,104,24,0xD295);
- ST7735_FillRect(11,56,104,24,0xFF9C);
- str(4,8,lang?"> ESPANOL":"> ENGLISH",0x294A);
- str(1,11,word("UP/DN: language","ARR/ABA: idioma"),0x294A);
- str(2,13,word("MINE: start","MINA: iniciar"),0x294A);
- sprite8(30,119,minerArt,0);sprite8(88,119,rabbitArt,2);
- sprite8(100,93,butterflyArt,3);
- heart(8,48,0xD295);heart(116,17,0xD295);
- str(1,18,word("MADE WITH LOVE","HECHO CON AMOR"),0xFF9C);
+ ST7735_FillScreen(0xFF9C);
+ label(22,12,"MYCRAFT",0x294A,2);
+ label(28,34,word("COZY GARDEN","JARDIN FELIZ"),0x294A,1);
+ ST7735_FillRect(7,53,114,28,0x294A);
+ label(16,60,lang?"ESPANOL":"ENGLISH",0xFFFF,2);
+ label(10,92,word("UP/DOWN: LANGUAGE","ARR/ABA: IDIOMA"),0x294A,1);
+ label(16,109,word("MINE: GO","MINA: IR"),0x294A,2);
+ heart(7,14,0xD295);heart(117,14,0xD295);
+ ST7735_FillRect(0,136,128,24,0x8DF1);
+ sprite8(9,143,minerArt,0);sprite8(110,143,rabbitArt,2);
+ label(20,144,word("WITH LOVE","CON AMOR"),0x294A,1);
 }
 static void endScreen(uint8_t win){
- int i;
- ST7735_FillScreen(win?0xC73F:0x0000);
- for(i=0;i<9;i++)heart((i*13)%124,8+(i*17)%100,0xF99F);
- str(1,5,win?word("HOME IS BUILT!","HOGAR LISTO!"):word("GAME OVER","FIN DEL JUEGO"),win?0x001F:PINK);
- str(2,8,word("SCORE:","PUNTOS:"),win?0x0000:0xFFFF);number(10,8,score);
- str(1,12,word("MADE WITH LOVE","HECHO CON AMOR"),win?0xF81F:0xFFFF);
- str(1,16,word("MINE: RESTART","MINA: REINICIA"),win?0x0000:GOLD);
+ char line[16];ST7735_FillScreen(0xFF9C);
+ label(10,16,win?word("YOU WIN!","GANASTE!"):word("GAME OVER","FIN JUEGO"),0x294A,2);
+ label(28,51,word("SCORE","PUNTOS"),0x294A,2);
+ snprintf(line,sizeof line,"%u",score);label(28,74,line,0x294A,2);
+ label(16,110,word("MINE: MENU","MINA: MENU"),0x294A,1);
+ label(16,140,word("MADE WITH LOVE","HECHO CON AMOR"),0x294A,1);
 }
 static void update(uint32_t buttons,uint32_t edges,uint32_t adc){
  int nx=playerX,tx,ty;
@@ -418,17 +436,27 @@ static void update(uint32_t buttons,uint32_t edges,uint32_t adc){
  (void)buttons;
 }
 
+static uint8_t helpPage;
 static void instructions(void){
  ST7735_FillScreen(0xFF9C);
- str(2,1,word("A LITTLE HOME","UN HOGAR PEQUENO"),0x294A);
- str(1,4,word("SLIDE: left/right","POT: izq/derecha"),0x294A);
- str(1,6,word("UP: jump","ARRIBA: saltar"),0x294A);
- str(1,8,word("DOWN: pick material","ABAJO: material"),0x294A);
- str(1,10,word("MINE: collect","MINA: recoger"),0x294A);
- str(1,12,word("BUILD: place block","CREA: poner bloque"),0x294A);
- str(1,14,word("3 gems + 5 blocks","3 gemas + 5 bloques"),0x294A);
- str(1,16,word("Avoid the slime!","Evita la baba!"),0x294A);
- str(1,18,word("MINE: let's go!","MINA: jugar!"),0xD295);
+ label(4,6,word("HOW TO PLAY","COMO JUGAR"),0x294A,1);
+ if(helpPage==0){
+  label(4,24,word("SLIDE POT","POT"),0x294A,2);
+  label(4,43,word("LEFT / RIGHT","IZQUIERDA / DERECHA"),0x294A,1);
+  label(4,63,word("UP","ARRIBA"),0x294A,2);
+  label(4,82,word("JUMP","SALTAR"),0x294A,1);
+  label(4,102,word("DOWN","ABAJO"),0x294A,2);
+  label(4,121,word("SELECT MATERIAL","ELEGIR MATERIAL"),0x294A,1);
+  label(4,146,word("MINE: NEXT","MINA: SIGUIENTE"),0x294A,1);
+ }else{
+  label(4,24,word("MINE","MINA"),0x294A,2);
+  label(4,43,word("COLLECT BLOCKS","RECOGER BLOQUES"),0x294A,1);
+  label(4,63,word("BUILD","CREA"),0x294A,2);
+  label(4,82,word("PLACE A BLOCK","PONER UN BLOQUE"),0x294A,1);
+  label(4,104,word("GOAL","META"),0x294A,2);
+  label(4,123,word("3 GEMS + 5 BLOCKS","3 GEMAS + 5 BLOQUES"),0x294A,1);
+  label(4,146,word("MINE: PLAY","MINA: JUGAR"),0x294A,1);
+ }
 }
 int main5(void){
  Input in; uint8_t redraw=0;
@@ -443,9 +471,9 @@ int main5(void){
   while(pop(&in)){
    if(state==0){
     if(in.edges&(UP|DOWN)){lang^=1;menu();}
-    if(in.edges&MINE){state=4;instructions();}
+    if(in.edges&MINE){state=4;helpPage=0;instructions();}
    }else if(state==4){
-    if(in.edges&MINE){worldInit();state=1;redraw=1;}
+    if(in.edges&MINE){if(!helpPage){helpPage=1;instructions();}else{worldInit();state=1;redraw=1;}}
    }else if(state==1){
     tick++;update(in.held,in.edges,in.adc);if(state==1)redraw=1;else redraw=0;
    }else if(in.edges&MINE){state=0;menu();}
@@ -469,7 +497,7 @@ int main0(void){ // ADC only: move the pot through its full travel.
 int main1(void){ // All text screens in both languages, no game timer.
  testInit();
  for(;;)for(lang=0;lang<2;lang++){
-  menu();Clock_Delay1ms(2500);instructions();Clock_Delay1ms(4000);
+  menu();Clock_Delay1ms(2500);helpPage=0;instructions();Clock_Delay1ms(4000);helpPage=1;instructions();Clock_Delay1ms(4000);
   worldInit();draw();Clock_Delay1ms(2500);
   endScreen(1);Clock_Delay1ms(2500);endScreen(0);Clock_Delay1ms(2500);
  }
