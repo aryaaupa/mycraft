@@ -4,7 +4,7 @@ root=Path(__file__).resolve().parents[1]
 s=root.joinpath('Lab9Main.c').read_text()
 s='\n'.join(l for l in s.splitlines() if not l.startswith('#include'))
 s=s.replace('int main(void)','int firmware_main(void)')
-s=s.replace('for(;*text;text++,x+=6*scale){', 'assert(x>=0 && y>=0 && x+(int)strlen(text)*6*scale-scale<=128 && y+7*scale<=160); for(;*text;text++,x+=6*scale){')
+s=s.replace('for(;*text;text++,x+=6*scale){', 'if(x<0||y<0||x+(int)strlen(text)*6*scale-scale>128||y+7*scale>160){fprintf(stderr,"TEXT OVERFLOW: %s %d %d %d\\n",text,x,y,scale);abort();} for(;*text;text++,x+=6*scale){')
 stub=r'''
 #include <stdint.h>
 #include <stdio.h>
@@ -52,38 +52,51 @@ static void capture(const char *name){char path[100];snprintf(path,sizeof path,"
 '''
 tests=r'''
 int main(void){
- Input input;timer.CPU_INT.IIDX=1;
- mockButtons=MINE;TIMG12_IRQHandler();assert(pop(&input)&&input.edges==0);
- TIMG12_IRQHandler();assert(pop(&input)&&input.edges==MINE);
- TIMG12_IRQHandler();assert(pop(&input)&&input.edges==0);
- mockButtons=0;TIMG12_IRQHandler();pop(&input);TIMG12_IRQHandler();assert(pop(&input)&&input.held==0);
- for(int i=0;i<20;i++)TIMG12_IRQHandler();assert(MyCraft_DroppedInputs==5);
- int count=0;while(pop(&input))count++;assert(count==15);
- worldInit();state=1;playerX=4;playerY=10;stock[0]=1;facing=1;tick=1;
- update(0,BUILD,2048);assert(built==1&&stock[0]==0&&placed[10][5]);
- update(0,MINE,2048);assert(built==0&&stock[0]==1&&score==0);
- for(int i=0;i<100;i++){update(0,BUILD,2048);update(0,MINE,2048);}assert(score==0&&built==0);
- worldInit();state=1;playerX=8;playerY=10;tick=1;facing=1;
- update(0,MINE,2048);assert(diamonds==1&&score==40);
- diamonds=3;built=4;stock[0]=1;update(0,BUILD,2048);assert(state==2&&built==5);
- worldInit();assert(score==0&&diamonds==0&&built==0&&hp==3);
- state=1;hp=0;update(0,0,2048);assert(state==3);
- for(int trial=0;trial<20;trial++){
-  worldInit();state=1;
-  for(int i=0;i<5000&&state==1;i++){
-   tick++;uint32_t r=random32();update(r&15,r&15,r%4096);
-   assert(playerX>=0&&playerX<W&&playerY>=2&&playerY<H);
-   unsigned n=0;for(int y=0;y<H;y++)for(int x=0;x<W;x++)n+=placed[y][x];assert(n==built);
-   if(i%8==0)draw();
-  }
+ timer.CPU_INT.IIDX=1;mockButtons=MINE;
+ TIMG12_IRQHandler();assert(presses==0);ready=0;
+ TIMG12_IRQHandler();assert(presses==MINE);ready=0;
+ presses=0;TIMG12_IRQHandler();assert(presses==0);
+ TIMG12_IRQHandler();assert(MyCraft_MissedFrames>=1);
+ mockButtons=0;TIMG12_IRQHandler();TIMG12_IRQHandler();assert(buttons==0);
+ resetGame();screen=PLAY;invincible=255;
+ // Complete an actual objective sequence, not by injecting progress counters.
+ for(int i=0;i<5;i++){playerX=woodX[i];update(0,MINE,2048);}
+ assert(phase==1&&wood==5&&score==50);
+ update(0,MINE,2048);assert(score==50);
+ playerX=5;update(0,BUILD,2048);assert(house==0&&wood==5);
+ playerX=90;
+ for(int i=0;i<5;i++)update(0,BUILD,2048);
+ assert(phase==2&&house==5&&wood==0&&score==150);
+ update(0,BUILD,2048);assert(score==150);
+ for(int i=0;i<3;i++){playerX=flowerX[i];update(0,MINE,2048);}
+ assert(screen==ENDING&&score==310&&flowers==3);
+ handle(0,MINE,2048);assert(screen==MENU);
+ handle(0,MINE,2048);assert(screen==HELP);
+ handle(0,MINE,2048);assert(helpPage==1);
+ handle(0,MINE,2048);assert(screen==PLAY&&score==0&&house==0&&wood==0);
+ // Collision penalty cannot underflow; one contact grants temporary protection.
+ playerX=slimeX;score=0;update(0,0,2048);assert(bumps==1&&score==0);
+ playerX=slimeX;update(0,0,2048);assert(bumps==1);
+ resetGame();screen=PLAY;update(0,UP,2048);
+ for(int i=0;i<22;i++)update(0,0,2048);assert(jump==0&&playerY==101);
+ uint32_t seed=7;
+ for(int i=0;i<10000;i++){
+  seed=seed*1664525u+1013904223u;
+  if(screen==PLAY)update(seed&15,seed&15,seed%4096);
+  assert(playerX>=0&&playerX<=120&&playerY>=81&&playerY<=101);
+  assert(house<=5&&wood<=5&&flowers<=3);if(i%10==0)draw();
  }
- for(lang=0;lang<2;lang++){ menu();helpPage=0;instructions();helpPage=1;instructions();score=65535;endScreen(1);endScreen(0);worldInit();draw();}
- lang=0;helpPage=0;menu();capture("menu");
- instructions();capture("instructions");
- worldInit();ST7735_FillScreen(0xC73F);draw();capture("game");
- puts("PASS: debounce, queue overflow, recycling, gems, win/loss, reset, randomized bounds and building counts");
+ for(lang=0;lang<2;lang++){
+  menu();helpPage=0;instructions();helpPage=1;instructions();
+  resetGame();backdrop();draw();score=65535;hud();ending();
+ }
+ lang=0;helpPage=0;menu();capture("menu");instructions();capture("instructions");
+ resetGame();backdrop();draw();capture("game");
+ for(int i=0;i<5;i++)collectedWood[i]=1;house=5;phase=2;score=150;backdrop();draw();capture("cottage");score=310;ending();capture("ending");
+ puts("PASS: debounce, mailbox, full objective sequence, replay, collision, jump, bounds, bilingual text fit");
 }
 '''
+
 with tempfile.TemporaryDirectory() as d:
  f=Path(d)/'check.c';f.write_text(stub+s+tests)
  exe=Path(d)/'check'

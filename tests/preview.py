@@ -1,8 +1,8 @@
 from PIL import Image,ImageDraw,ImageFont
 from pathlib import Path
 p=Path(__file__).resolve().parents[1]
-canv=Image.new('RGB',(1000,510),'#f6f0e8');d=ImageDraw.Draw(canv)
-for idx,name in enumerate(['menu','instructions','game']):
+canv=Image.new('RGB',(1650,510),'#f6f0e8');d=ImageDraw.Draw(canv)
+for idx,name in enumerate(['menu','instructions','game','cottage','ending']):
  im=Image.open(p/(name+'.ppm'));draw=ImageDraw.Draw(im);font=ImageFont.load_default(size=8)
  for line in (p/(name+'_text.tsv')).read_text().splitlines():
   x,y,c,txt=line.split('\t',3);c=int(c);color=(((c>>11)&31)*255//31,((c>>5)&63)*255//63,(c&31)*255//31)
